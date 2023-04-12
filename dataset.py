@@ -2,7 +2,7 @@ import os
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-from torch.utils.data import Dataset, SubsetRandomSampler
+from torch.utils.data import Dataset, Subset
 
 
 class VideoDataset(Dataset):
@@ -10,9 +10,10 @@ class VideoDataset(Dataset):
         self.data_path = data_path
         self.image_sequences = []
         self.labels = []
-        self.emotion_map = {'Anger': 0, 'Fear': 1, 'Happiness': 2, 'Sadness': 3, 'Surprise': 4}
+        self.class_names = ['Anger', 'Fear', 'Happiness', 'Sadness', 'Surprise']
+        self.num_classes = len(self.class_names)
 
-        for emotion in os.listdir(self.data_path):
+        for emotion_idx, emotion in enumerate(self.class_names):
             emotion_dir = os.path.join(self.data_path, emotion)
             image_files = os.listdir(emotion_dir)
             image_files = [os.path.join(emotion_dir, f) for f in image_files]
@@ -20,13 +21,17 @@ class VideoDataset(Dataset):
             for i, image_file in enumerate(image_files):
                 if i % 100 == 0 and i != 0:
                     self.image_sequences.append(sequence)
-                    self.labels.append(emotion)
+                    label = torch.zeros((100, self.num_classes))
+                    label[:, emotion_idx] = 1
+                    self.labels.append(label)
                     sequence = []
                 sequence.append(image_file)
             if sequence:
                 self.image_sequences.append(sequence)
-                self.labels.append(emotion)
-
+                label = torch.zeros((len(sequence), self.num_classes))
+                label[:, emotion_idx] = 1
+                self.labels.append(label)
+        
         self.transform = transforms.Compose([
             transforms.Grayscale(num_output_channels=1),
             transforms.Resize(224),
@@ -43,20 +48,23 @@ class VideoDataset(Dataset):
         indices = list(range(dataset_size))
         split = int(train_ratio * dataset_size)
         train_indices, val_indices = indices[:split], indices[split:]
-        self.train_sampler = SubsetRandomSampler(train_indices)
-        self.val_sampler = SubsetRandomSampler(val_indices)
+
+        self.train_subset = Subset(self, train_indices)
+        self.val_subset = Subset(self, val_indices)
 
     def __getitem__(self, index):
         sequence = self.image_sequences[index]
-        label_str = self.labels[index]
+        label_one_hot = self.labels[index]
         images = []
         for image_path in sequence:
             image = Image.open(image_path).convert('L')
             image = self.transform(image)
             images.append(image)
         images = torch.stack(images, dim=0)
-        label = torch.tensor(self.emotion_map[label_str], dtype=torch.long)
-        return images, label
+        return images, label_one_hot
 
     def __len__(self):
         return len(self.image_sequences)
+
+
+

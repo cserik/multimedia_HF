@@ -5,24 +5,30 @@ from torch.utils.data import DataLoader, random_split
 from torch import nn, optim, manual_seed, no_grad
 import torch
 
+# Check if GPU is available
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("Device:", device)
+
 # Define the dataset and dataloaders
 # Set random seed for reproducibility
 manual_seed(0)
 
 # Define hyperparameters
-batch_size = 10
+batch_size = 1
 learning_rate = 0.001
 num_epochs = 10
 
 # Create dataset and dataloaders
 dataset = VideoDataset(data_path='C:\\Users\\bwim_erik\\Desktop\\BME_MSc\\multimedia\\HF_lstm\\lstm\\data\\image_data\\data\\video_data')
-train_sampler = dataset.train_sampler
-val_sampler = dataset.val_sampler
-trainloader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
-valloader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
+train_subset = dataset.train_subset
+val_subset = dataset.val_subset
+trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=True)
 
 # Define the model and optimizer
 model = CNNLSTM()
+# move model to device
+model.to(device)
 # define your loss function and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -37,13 +43,16 @@ for epoch in range(num_epochs):
         # Get the inputs and labels
         inputs, labels = data
         inputs = inputs.view(-1, 1, 224, 224)
+        # move inputs and labels to device
+        inputs, labels = inputs.to(device), labels.to(device)
         
         # Zero the parameter gradients
         optimizer.zero_grad()
 
         # Forward pass, backward pass, and optimize
         outputs = model(inputs)
-        loss = criterion(outputs, labels)
+
+        loss = criterion(outputs, labels.squeeze(0))
         loss.backward()
         optimizer.step()
 
@@ -62,6 +71,9 @@ for epoch in range(num_epochs):
         for i, data in enumerate(valloader):
             inputs, labels = data
             inputs = inputs.view(-1, 1, 224, 224)
+            # move inputs and labels to device
+            inputs, labels = inputs.to(device), labels.to(device)
+            
             outputs = model(inputs)
             _, predicted = torch.max(outputs.data, 1)
             total_samples += labels.size(0)
@@ -72,3 +84,4 @@ for epoch in range(num_epochs):
         print('Validation accuracy: %.2f%%' % val_accuracy)
         
     model.train()   # set the model back to training mode
+
