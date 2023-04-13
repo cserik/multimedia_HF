@@ -1,8 +1,12 @@
 import torch
 from torchvision.models import resnet50
+from torchvision import models
 import torch.nn as nn
 
 num_classes = 5
+
+#kipróbálni, hogy csak onnan szedek ki 30 kepet (grayscale + facecrop) ahol a legnagyobb valtozas tortent a videoban, majd az egymas utani harmat
+#osszerakom egy 3 channeles keppe, hogy jo resnet input legyen és akkor 10-esevel fogom beadni a kepet a neuralis halonak vagy ebbol az informaciot 3x256x256-ra tomoriteni
 
 class CNNLSTM(nn.Module):
     def __init__(self):
@@ -44,3 +48,48 @@ class CNNLSTM(nn.Module):
         x = self.fc(x)
         
         return x
+    
+
+class ResNetLSTM(nn.Module):
+    def __init__(self, hidden_size=128, num_layers=2):
+        super(ResNetLSTM, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        
+        # Pre-trained ResNet-50 model
+        self.resnet = models.resnet50(pretrained=True)
+        # Freeze model parameters
+        for param in self.resnet.parameters():
+            param.requires_grad = False
+        
+        fc_inputs = self.resnet.fc.in_features
+        self.resnet.fc = nn.Sequential(
+            nn.Linear(fc_inputs, 256),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(256, num_classes), 
+            nn.LogSoftmax(dim=1) 
+        )
+        
+        # LSTM layers
+        self.lstm = nn.LSTM(2048, hidden_size, num_layers, batch_first=True)
+        
+        # Output layer
+        self.fc = nn.Linear(hidden_size, num_classes)
+        
+    def forward(self, x):
+        # ResNet forward pass
+        x = self.resnet(x)
+        x = x.view(x.size(0), -1)
+        
+        # LSTM forward pass
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        
+        x, _ = self.lstm(x.unsqueeze(1), (h0, c0))
+        
+        # Output layer forward pass
+        x = self.fc(x[:, -1, :])
+        
+        return x
+

@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 from torch.utils.data import Dataset, Subset
 
+import random
 
 class VideoDataset(Dataset):
     def __init__(self, data_path, train_ratio=0.8):
@@ -31,7 +32,12 @@ class VideoDataset(Dataset):
                 label = torch.zeros((len(sequence), self.num_classes))
                 label[:, emotion_idx] = 1
                 self.labels.append(label)
-        
+
+        # Shuffle image sequences and labels
+        zipped = list(zip(self.image_sequences, self.labels))
+        random.shuffle(zipped)
+        self.image_sequences, self.labels = zip(*zipped)
+
         self.transform = transforms.Compose([
             transforms.Grayscale(num_output_channels=1),
             transforms.Resize(224),
@@ -65,6 +71,3 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.image_sequences)
-
-
-
