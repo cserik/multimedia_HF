@@ -22,17 +22,15 @@ class VideoDataset(Dataset):
             image_files = [os.path.join(emotion_dir, f) for f in image_files]
             sequence = []
             for i, image_file in enumerate(image_files):
-                if i % 30 == 0 and i != 0:
+                if i % 3 == 0 and i != 0:
                     self.image_sequences.append(sequence)
-                    label = torch.zeros((30, self.num_classes))
-                    label[:, emotion_idx] = 1
+                    label = emotion_idx
                     self.labels.append(label)
                     sequence = []
                 sequence.append(image_file)
             if sequence:
                 self.image_sequences.append(sequence)
-                label = torch.zeros((len(sequence), self.num_classes))
-                label[:, emotion_idx] = 1
+                label = emotion_idx
                 self.labels.append(label)
 
         # Shuffle image sequences and labels
@@ -41,7 +39,7 @@ class VideoDataset(Dataset):
         self.image_sequences, self.labels = zip(*zipped)
 
         self.transform = transforms.Compose([
-            #transforms.Grayscale(num_output_channels=1),
+            transforms.Grayscale(num_output_channels=1),
             transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
@@ -68,18 +66,13 @@ class VideoDataset(Dataset):
             image_paths = sequence[i:i+3]
             grayscale_images = []
             for image_path in image_paths:
-                image = Image.open(image_path).convert('L')
+                image = Image.open(image_path)
                 image = self.transform(image)
                 grayscale_images.append(image)
-            grayscale_images = [img.numpy() for img in grayscale_images]
-            stacked_images = np.stack(grayscale_images, axis=2)
-            combined_image = Image.fromarray(np.squeeze(stacked_images), mode='RGB')
-            combined_image = combined_image.resize((224, 224), resample=Image.BILINEAR)
-            images.append(torch.tensor(np.array(combined_image), dtype=torch.float32))
-            label = torch.argmax(self.labels[index]).item()
+            label = self.labels[index]
             labels.append(label)
         labels = torch.tensor(labels)
-        images = torch.stack(images, dim=0)
+        images = torch.stack(grayscale_images, dim=0)
         return images, labels
     
     def __len__(self):

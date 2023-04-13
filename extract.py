@@ -55,7 +55,8 @@ def crop_face(name):
     if len(faces) > 0:
         for i, (x, y, w, h) in enumerate(faces):
             face = img[y:y + h, x:x + w]
-            cv2.imwrite(name, face)
+            resized_face = cv2.resize(face, (224, 224))
+            cv2.imwrite(name, resized_face)
 
 def extract_frames(video_dir, image_dir, num_workers=4):
     video_paths = []
