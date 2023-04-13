@@ -1,4 +1,4 @@
-from model import CNNLSTM, ResNetLSTM
+from model import CNNLSTM, ResNetLSTM, ResNetLSTM2, CustomResNet50
 from cnn_lstm_model import LSTMNet
 from dataset import VideoDataset
 from torch.utils.data import DataLoader, random_split
@@ -26,12 +26,12 @@ trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
 valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=True)
 
 # Define the model and optimizer
-model = ResNetLSTM()
+model = CustomResNet50()
 # move model to device
 model.to(device)
 # define your loss function and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+criterion = nn.NLLLoss()
+optimizer = optim.Adam(model.parameters())
 #optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Set the model to training mode
@@ -48,14 +48,13 @@ for epoch in range(num_epochs):
 
         # Get the inputs and labels
         inputs, labels = data
-        inputs = inputs.view(-1, 1, 224, 224)
+        inputs = inputs.view(-1, 3, 224, 224)
         # move inputs and labels to device
         inputs, labels = inputs.to(device), labels.to(device)
 
         # Forward pass, backward pass, and optimize
         outputs = model(inputs)
-        shape=outputs.shape
-        labels=labels.view(shape[0], 5)
+        labels=labels.view(outputs.shape[0])
         loss = criterion(outputs,labels)
         loss.backward()
 
@@ -77,15 +76,14 @@ for epoch in range(num_epochs):
         total_samples = 0
         for i, data in enumerate(valloader):
             inputs, labels = data
-            inputs = inputs.view(-1, 1, 224, 224)
+            inputs = inputs.view(-1, 3, 224, 224)
             # move inputs and labels to device
             inputs, labels = inputs.to(device), labels.to(device)
-            
             outputs = model(inputs)
-            shape=outputs.shape
-            labels=labels.view(shape[0], 5)
+            labels=labels.view(outputs.shape[0])
             _, predicted = torch.max(outputs.data, 1)
-            _, expected = torch.max(labels.data, 1)
+            #_, expected = torch.max(labels,1)
+            expected = labels
             total_samples += expected.size(0)
             total_correct += (predicted == expected).sum().item()
         

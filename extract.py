@@ -13,13 +13,14 @@ def process_video(video_path, image_path):
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    interval = max(1, frame_count // 100)
-
+    # Extract 30 frames from the middle of the video
+    middle_frame = frame_count // 2
+    interval = max(1, (middle_frame - 15) // 30)
     frames = []
-    for i in range(0, 100):
-        frame_index = i * interval
+    for i in range(0, 30):
+        frame_index = middle_frame - 15 + i * interval
         if frame_index >= frame_count:
-            # If the video has fewer than 100 frames, loop back to the beginning
+            # If the video has fewer than 30 frames from the middle, loop back to the beginning
             frame_index %= frame_count
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
@@ -27,22 +28,34 @@ def process_video(video_path, image_path):
         if not ret:
             break
 
-        # Resize and convert to grayscale
+        # Resize and convert to RGB
         frame = cv2.resize(frame, (224, 224))
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        frames.append(frame)
-
-    cap.release()
-
-    # If the video has fewer than 100 frames, repeat the last frame until there are 100 frames
-    while len(frames) < 100:
-        frames.append(frames[-1])
-
-    for i, frame in enumerate(frames):
+        # Save the frame
         image_name = f"{video_name}_{i:05d}.jpg"
         image_path = os.path.join(image_dir, image_name)
         cv2.imwrite(image_path, frame)
+
+        # Crop and save the face(s) in the frame using the provided function
+        crop_face(image_path)
+
+    cap.release()
+
+def crop_face(name):
+    # Read the input image
+    img = cv2.imread(name)
+    # read the haarcascade to detect the faces in an image
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml')
+
+    # detects faces in the input image
+    faces = face_cascade.detectMultiScale(img, 1.3, 4)
+    #print('Number of detected faces:', len(faces))
+
+    # loop over all detected faces
+    if len(faces) > 0:
+        for i, (x, y, w, h) in enumerate(faces):
+            face = img[y:y + h, x:x + w]
+            cv2.imwrite(name, face)
 
 def extract_frames(video_dir, image_dir, num_workers=4):
     video_paths = []

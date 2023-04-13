@@ -2,7 +2,9 @@ import os
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
+import cv2
 from torch.utils.data import Dataset, Subset
+import numpy as np
 
 import random
 
@@ -11,7 +13,7 @@ class VideoDataset(Dataset):
         self.data_path = data_path
         self.image_sequences = []
         self.labels = []
-        self.class_names = ['Anger', 'Fear', 'Happiness', 'Sadness', 'Surprise']
+        self.class_names = ['Anger', 'Disgust', 'Fear', 'Happiness', 'Sadness', 'Surprise']
         self.num_classes = len(self.class_names)
 
         for emotion_idx, emotion in enumerate(self.class_names):
@@ -20,9 +22,9 @@ class VideoDataset(Dataset):
             image_files = [os.path.join(emotion_dir, f) for f in image_files]
             sequence = []
             for i, image_file in enumerate(image_files):
-                if i % 100 == 0 and i != 0:
+                if i % 30 == 0 and i != 0:
                     self.image_sequences.append(sequence)
-                    label = torch.zeros((100, self.num_classes))
+                    label = torch.zeros((30, self.num_classes))
                     label[:, emotion_idx] = 1
                     self.labels.append(label)
                     sequence = []
@@ -39,7 +41,7 @@ class VideoDataset(Dataset):
         self.image_sequences, self.labels = zip(*zipped)
 
         self.transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
+            #transforms.Grayscale(num_output_channels=1),
             transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
@@ -60,14 +62,26 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         sequence = self.image_sequences[index]
-        label_one_hot = self.labels[index]
+        labels = []
         images = []
-        for image_path in sequence:
-            image = Image.open(image_path).convert('L')
-            image = self.transform(image)
-            images.append(image)
+        for i in range(0, len(sequence), 3):
+            image_paths = sequence[i:i+3]
+            grayscale_images = []
+            for image_path in image_paths:
+                image = Image.open(image_path).convert('L')
+                image = self.transform(image)
+                grayscale_images.append(image)
+            grayscale_images = [img.numpy() for img in grayscale_images]
+            stacked_images = np.stack(grayscale_images, axis=2)
+            combined_image = Image.fromarray(np.squeeze(stacked_images), mode='RGB')
+            combined_image = combined_image.resize((224, 224), resample=Image.BILINEAR)
+            images.append(torch.tensor(np.array(combined_image), dtype=torch.float32))
+            label = torch.argmax(self.labels[index]).item()
+            labels.append(label)
+        labels = torch.tensor(labels)
         images = torch.stack(images, dim=0)
-        return images, label_one_hot
-
+        return images, labels
+    
     def __len__(self):
         return len(self.image_sequences)
+
