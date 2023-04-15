@@ -4,6 +4,8 @@ from dataset import VideoDataset
 from torch.utils.data import DataLoader, random_split
 from torch import nn, optim, manual_seed, no_grad
 import torch
+import numpy as np
+import time
 
 # Check if GPU is available
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -15,8 +17,9 @@ manual_seed(0)
 
 # Define hyperparameters
 batch_size = 32
-learning_rate = 0.0001
-num_epochs = 20
+learning_rate = 0.0005
+num_epochs = 40
+patience = 4
 
 # Create dataset and dataloaders
 dataset = VideoDataset(data_path='C:\\Users\\bwim_erik\\Desktop\\BME_MSc\\multimedia\\HF_lstm\\lstm\\data\\image_data\\data\\video_data')
@@ -29,39 +32,30 @@ valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=True)
 model = CustomResNet50()
 # move model to device
 model.to(device)
-# define your loss function and optimizer
+
+# Define the loss function
 criterion = nn.NLLLoss()
-optimizer = optim.Adam(model.parameters())
-#optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-"""import matplotlib.pyplot as plt
+# Define the optimizer and scheduler
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=1, verbose=True, factor=0.5)
 
-# assuming you have created a DataLoader object named "data_loader"
-batch = next(iter(valloader))
-
-# assuming the first element of the batch contains the images
-images = batch[0]
-images=images.view(-1, 3, 224, 224)
-print(images[0].shape)
-
-# select the first image from the batch
-image = images[0]
-# Convert the image to a NumPy array
-image = image.numpy()
-
-# Normalize the pixel values to [0, 1]
-image = (image - image.min()) / (image.max() - image.min())
-# Plot the image
-plt.imshow(image.transpose(1, 2, 0))
-plt.show()"""
 # Set the model to training mode
 model.train()
-torch.cuda.empty_cache()
-# Zero the parameter gradients
-optimizer.zero_grad()
+
+# Define variables to store the best validation accuracy and corresponding model weights
+best_val_acc = 0
+best_weights = None
+best_val_loss = 1000
+
+# Define lists to store train and validation loss and accuracy
+train_loss_list, train_acc_list, val_loss_list, val_acc_list = [], [], [], []
+
 # Train the network
 for epoch in range(num_epochs):
     running_loss = 0.0
+
+    # Train loop
     for i, data in enumerate(trainloader):
         # Get the inputs and labels
         inputs, labels = data
@@ -69,49 +63,93 @@ for epoch in range(num_epochs):
         # move inputs and labels to device
         inputs, labels = inputs.to(device), labels.to(device)
 
+        optimizer.zero_grad()
         # Forward pass, backward pass, and optimize
         outputs = model(inputs)
-        labels=labels.view(outputs.shape[0])
-        loss = criterion(outputs,labels)
+        labels = labels.view(outputs.shape[0])
+        loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
 
         # Print statistics
         running_loss += loss.item()
-        if i % 10 == 9:    # print every 10 mini-batches
-            print('[Epoch %d, Batch %5d] Loss: %.3f' %
-                  (epoch + 1, (i + 1)*batch_size, running_loss / 10))
+        if i % 2 == 0:    # print every 10 mini-batches
+            print('[Epoch %d, Batch %5d] Loss: %.3f' % (epoch + 1, i, running_loss / 2))
             running_loss = 0.0
-            #the steps are here because so the batch size is larger (can't pass large batches to gpu do we used small batch size instead-> 
-            # but it is almost the same because after x*small_bath size will be the weight updated)
-            #optimizer.step()
-            #optimizer.zero_grad()
-            
-    # Validation
+
+    # Compute the training loss and accuracy
+    with torch.no_grad():
+        model.eval()
+        train_loss, total_train_samples, total_train_correct = 0, 0, 0
+        for i, data in enumerate(trainloader):
+            inputs, labels = data
+            inputs = inputs.view(-1, 3, 224, 224)
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            labels = labels.view(outputs.shape[0])
+            _, predicted = torch.max(outputs.data, 1)
+            total_train_samples += labels.size(0)
+            total_train_correct += (predicted == labels).sum().item()
+            train_loss += criterion(outputs, labels).item()
+
+        train_acc = 100 * total_train_correct / total_train_samples
+        train_loss = train_loss / len(trainloader)
+        train_loss_list.append(train_loss)
+        train_acc_list.append(train_acc)
+
+    # Validation loop
     model.eval()    # set the model to evaluation mode
-    with no_grad():
-        total_correct = 0
-        total_samples = 0
+    with torch.no_grad():
+        total_correct, total_samples, val_loss = 0, 0, 0
         for i, data in enumerate(valloader):
             inputs, labels = data
             inputs = inputs.view(-1, 3, 224, 224)
             # move inputs and labels to device
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            labels=labels.view(outputs.shape[0])
+            labels = labels.view(outputs.shape[0])
             _, predicted = torch.max(outputs.data, 1)
-            #_, expected = torch.max(labels,1)
-            expected = labels
-            total_samples += expected.size(0)
-            total_correct += (predicted == expected).sum().item()
-        
-        # Calculate the validation accuracy
+            total_samples += labels.size(0)
+            total_correct += (predicted == labels).sum().item()
+            # calculate validation loss
+            loss = criterion(outputs, labels)
+            val_loss += loss.item()
+
+        # Calculate the validation accuracy and loss
         val_accuracy = 100 * total_correct / total_samples
-        print('Validation accuracy: %.2f%%' % val_accuracy)
+        val_loss /= len(valloader)
+        print('Validation accuracy: %.2f%%, Validation Loss: %.3f' % (val_accuracy, val_loss))
 
+        # save train and validation loss and accuracy in lists
+        val_loss_list.append(val_loss)
+        val_acc_list.append(val_accuracy)
+
+        # early stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_weights = model.state_dict()
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+
+        if epochs_no_improve == patience:
+            print("Early stopping, no improvement in validation loss in %d epochs." % patience)
+            break
+    
+    # set model back to training mode
     model.train()
-        
-torch.save(model.state_dict(), 'model_weights_v3.pth')
-print("Model weights saved.")
 
+# save best model weights
+torch.save(best_weights, 'best_model_weights.pth')
+
+# save train and validation loss and accuracy to txt file
+with open('loss_and_acc.txt', 'w') as f:
+    f.write(' '.join(map(str, train_loss_list)))
+    f.write('\n')
+    f.write(' '.join(map(str, train_acc_list)))
+    f.write('\n')
+    f.write(' '.join(map(str, val_loss_list)))
+    f.write('\n')
+    f.write(' '.join(map(str, val_acc_list)))
+
+print("Training complete.")
