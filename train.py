@@ -19,7 +19,7 @@ manual_seed(0)
 batch_size = 32
 learning_rate = 0.0005
 num_epochs = 40
-patience = 4
+patience = 3
 
 # Create dataset and dataloaders
 dataset = VideoDataset(data_path='C:\\Users\\bwim_erik\\Desktop\\BME_MSc\\multimedia\\HF_lstm\\lstm\\data\\image_data\\data\\video_data')

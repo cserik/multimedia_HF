@@ -7,8 +7,8 @@ from tqdm import tqdm
 def process_video(args):
     video_path, image_path = args
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    image_dir = os.path.join(image_path, os.path.dirname(video_path))
-    os.makedirs(image_dir, exist_ok=True)
+    video_dir = os.path.join(image_path, video_name)
+    os.makedirs(video_dir, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -16,7 +16,7 @@ def process_video(args):
 
     # Extract 45 frames from the middle of the video
     middle_frame = frame_count // 2
-    interval = max(1, (middle_frame - 22) // 45)
+    interval = (frame_count - 44) // 45
     frames = []
     for i in range(0, 45):
         frame_index = middle_frame - 22 + i * interval
@@ -34,7 +34,7 @@ def process_video(args):
 
         # Save the frame
         image_name = f"{video_name}_{i:05d}.jpg"
-        image_path = os.path.join(image_dir, image_name)
+        image_path = os.path.join(video_dir, image_name)
         cv2.imwrite(image_path, frame)
 
         # Crop and save the face(s) in the frame using the provided function
@@ -69,7 +69,6 @@ def extract_frames(video_dir, image_dir, num_workers=4):
 
     with mp.Pool(num_workers) as pool:
         results = list(tqdm(pool.imap_unordered(process_video, [(video_path, image_dir) for video_path in video_paths]), total=len(video_paths)))
-
 
     print("\nDone!")
 
