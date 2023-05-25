@@ -28,6 +28,28 @@ val_subset = dataset.val_subset
 trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
 valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=True)
 
+import matplotlib.pyplot as plt
+
+batch = next(iter(valloader))
+images = batch[0]
+images = images.view(-1, 3, 224, 224)
+
+fig, axs = plt.subplots(2, 2)
+axs = axs.flatten()
+
+"""for i in range(3):
+    channel = images[0,i,:,:].numpy()
+    channel = (channel - channel.min()) / (channel.max() - channel.min())
+    axs[i].imshow(channel, cmap='gray')
+    axs[i].set_title(f'Channel {i+1}')
+
+transposed = images[0].numpy().transpose(1, 2, 0)
+transposed = (transposed - transposed.min()) / (transposed.max() - transposed.min())
+axs[3].imshow(transposed)
+axs[3].set_title('Transposed')
+
+plt.show()"""
+
 # Define the model and optimizer
 model = CustomResNet50()
 # move model to device

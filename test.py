@@ -23,7 +23,7 @@ class_names = ['Anger', 'Disgust', 'Fear', 'Happiness', 'Sadness', 'Surprise']
 
 # Load the best PyTorch model weights
 model = CustomResNet50()
-model.load_state_dict(torch.load('best_model_weights.pth'))
+model.load_state_dict(torch.load('model_weights_v2.pth'))
 model.eval()
 
 final_predictions=[]
@@ -54,6 +54,7 @@ for root, dirs, files in os.walk(images_data):
             most_common = max(set(labels), key=labels.count)
             final_predictions.append(class_names[most_common])
             print(len(final_predictions))
+            print(class_names[most_common])
         except Exception as e:
             print(f"Error processing images in directory {dir}: {e}")
 
